@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: kayseur-mdx
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: BOT_NAME
+        value: KAYSEUR MDX
+      - key: OWNER_NAME
+        value: MR KING KAYSEUR
+      - key: WHATSAPP_CHANNEL
+        value: https://whatsapp.com/channel/0029VbDvPxj0VycNWTvOrE0x
+      - key: PORT
+        value: 10000
