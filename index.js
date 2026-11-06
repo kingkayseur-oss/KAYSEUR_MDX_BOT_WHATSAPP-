@@ -1,4 +1,4 @@
-const express = require('express');
+iconst express = require('express');
 const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
@@ -228,9 +228,292 @@ app.post('/api/pair',async(req,res)=>{
    const dir=path.join(AUTH_ROOT,phone); const credsPath=path.join(dir,'creds.json');
    if(fs.existsSync(credsPath)) { try { const c=JSON.parse(fs.readFileSync(credsPath,'utf8')); if(c.registered) return res.status(409).json({error:'Ce numéro possède déjà une session enregistrée sur ce serveur.'}); } catch{} }
    let sock=sessions.get(phone)?.sock;
-   if(!sock) sock=await startSession(phone);
-   const code=await sock.requestPairingCode(phone);
-   return res.json({ok:true,code});
- } catch(e) { console.error('Pair error',e?.message); sessions.delete(phone); return res.status(500).json({error:'Impossible de générer le code. Réessaie dans quelques instants.'}); }
+   // ===============================
+// KAYSEUR MDX - PAIRING CORRIGÉ
+// ===============================
+
+const pairingLocks = new Map();
+const pairingTimes = new Map();
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function startSession(phone) {
+  const dir = path.join(AUTH_ROOT, phone);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const { state, saveCreds } = await useMultiFileAuthState(dir);
+
+  const sock = makeWASocket({
+    auth: state,
+    logger: pino({ level: 'silent' }),
+    printQRInTerminal: false,
+    browser: ['KAYSEUR MDX', 'Chrome', '1.0.0'],
+    markOnlineOnConnect: false,
+    syncFullHistory: false
+  });
+
+  const session = {
+    sock,
+    dir,
+    connected: false,
+    pairing: true
+  };
+
+  sessions.set(phone, session);
+
+  sock.ev.on('creds.update', saveCreds);
+
+  // Attendre que la connexion démarre réellement
+  session.ready = new Promise((resolve, reject) => {
+    let finished = false;
+
+    const timeout = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        reject(new Error('Délai de connexion dépassé'));
+      }
+    }, 20000);
+
+    sock.ev.on('connection.update', update => {
+      if (finished) return;
+
+      if (update.connection === 'connecting' ||
+          update.connection === 'open') {
+        finished = true;
+        clearTimeout(timeout);
+        resolve(true);
+      }
+
+      if (update.connection === 'close') {
+        finished = true;
+        clearTimeout(timeout);
+        reject(new Error('Connexion WhatsApp fermée'));
+      }
+    });
+  });
+
+  sock.ev.on('connection.update', async update => {
+    const { connection, lastDisconnect } = update;
+
+    if (connection === 'open') {
+      const current = sessions.get(phone);
+      if (current && current.sock === sock) {
+        current.connected = true;
+        current.pairing = false;
+      }
+
+      console.log('KAYSEUR MDX connecté :', phone);
+    }
+
+    if (connection === 'close') {
+      const current = sessions.get(phone);
+
+      if (current && current.sock === sock) {
+        current.connected = false;
+      }
+
+      const code = lastDisconnect?.error?.output?.statusCode;
+
+      if (code === DisconnectReason.loggedOut) {
+        if (current && current.sock === sock) {
+          sessions.delete(phone);
+        }
+        return;
+      }
+
+      // Ne pas créer plusieurs sockets pendant le pairing.
+      if (current && current.sock === sock && current.pairing) {
+        sessions.delete(phone);
+        return;
+      }
+
+      // Reconnexion uniquement pour la session encore active.
+      if (current && current.sock === sock) {
+        setTimeout(async () => {
+          const latest = sessions.get(phone);
+          if (!latest || latest.sock !== sock) return;
+
+          try {
+            await startSession(phone);
+          } catch (err) {
+            console.error('Erreur reconnexion :', err.message);
+          }
+        }, 5000);
+      }
+    }
+  });
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+
+    for (const m of messages) {
+      if (m.message && !m.key.fromMe) {
+        await handleCommand(sock, m, phone);
+      }
+    }
+  });
+
+  sock.ev.on('group-participants.update', async update => {
+    const cfg = getSettings(update.id);
+
+    for (const participant of (update.participants || [])) {
+      if (update.action === 'add' && cfg.welcome) {
+        await sock.sendMessage(update.id, {
+          text: stylize(
+            `Bienvenue @${jidNumber(participant)} dans le groupe !`
+          ),
+          mentions: [participant]
+        });
+      }
+
+      if (update.action === 'remove' && cfg.goodbye) {
+        await sock.sendMessage(update.id, {
+          text: stylize(
+            `@${jidNumber(participant)} a quitté le groupe. À bientôt !`
+          ),
+          mentions: [participant]
+        });
+      }
+    }
+  });
+
+  return sock;
+}
+
+// ===============================
+// ROUTES DU SITE ET DU PAIRING
+// ===============================
+
+app.get('/health', (req, res) => {
+  res.json({
+    ok: true,
+    bot: BOT,
+    sessions: sessions.size,
+    commands: ALL_COMMANDS.length
+  });
 });
-app.listen(PORT,()=>console.log(`${BOT} pairing server listening on ${PORT}`));
+
+app.get('/api/status', (req, res) => {
+  res.json({
+    ok: true,
+    commands: ALL_COMMANDS.length,
+    bot: BOT
+  });
+});
+
+app.post('/api/pair', async (req, res) => {
+  const phone = String(req.body?.phone || '').replace(/\D/g, '');
+
+  if (phone.length < 8 || phone.length > 15) {
+    return res.status(400).json({
+      error: 'Numéro invalide. Ajoute ton indicatif sans le signe +.'
+    });
+  }
+
+  // Empêcher plusieurs demandes simultanées pour le même numéro.
+  if (pairingLocks.has(phone)) {
+    return res.status(429).json({
+      error: 'Une demande est déjà en cours. Patiente quelques instants.'
+    });
+  }
+
+  // Petite protection contre les demandes répétées.
+  const last = pairingTimes.get(phone) || 0;
+
+  if (Date.now() - last < 15000) {
+    return res.status(429).json({
+      error: 'Patiente quelques secondes avant de redemander un code.'
+    });
+  }
+
+  pairingLocks.set(phone, true);
+  pairingTimes.set(phone, Date.now());
+
+  try {
+    const dir = path.join(AUTH_ROOT, phone);
+    const credsPath = path.join(dir, 'creds.json');
+
+    if (fs.existsSync(credsPath)) {
+      try {
+        const creds = JSON.parse(
+          fs.readFileSync(credsPath, 'utf8')
+        );
+
+        if (creds.registered) {
+          return res.status(409).json({
+            error: 'Ce numéro possède déjà une session enregistrée.'
+          });
+        }
+      } catch (err) {
+        console.log('Lecture session :', err.message);
+      }
+    }
+
+    // Créer un seul socket pour ce numéro.
+    let session = sessions.get(phone);
+
+    if (session && session.connected) {
+      return res.status(409).json({
+        error: 'Ce numéro est déjà connecté.'
+      });
+    }
+
+    if (session && session.pairing) {
+      return res.status(429).json({
+        error: 'Un code a déjà été demandé. Vérifie WhatsApp.'
+      });
+    }
+
+    const sock = await startSession(phone);
+    session = sessions.get(phone);
+
+    // Attendre le démarrage de la connexion.
+    await session.ready;
+
+    // Laisser le temps au socket de se stabiliser.
+    await wait(1500);
+
+    // Vérifier que le socket est toujours celui de la session.
+    const current = sessions.get(phone);
+
+    if (!current || current.sock !== sock) {
+      throw new Error('La session a changé pendant le pairing.');
+    }
+
+    // Demander le code une seule fois.
+    const code = await sock.requestPairingCode(phone);
+
+    console.log('Code de pairing généré pour :', phone);
+
+    return res.json({
+      ok: true,
+      code
+    });
+
+  } catch (err) {
+    console.error('PAIRING ERROR :', err.message);
+
+    const session = sessions.get(phone);
+
+    if (session && !session.connected) {
+      sessions.delete(phone);
+
+      try {
+        session.sock.end(undefined);
+      } catch {}
+    }
+
+    return res.status(500).json({
+      error: 'Connexion impossible. Patiente un instant puis réessaie.'
+    });
+
+  } finally {
+    pairingLocks.delete(phone);
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`${BOT} pairing server listening on ${PORT}`);
+});
