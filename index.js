@@ -44,23 +44,18 @@ function stylize(input = '') {
   return String(input)
     .split(/(https?:\/\/[^\s]+|\.[a-z0-9][a-z0-9_-]*)/gi)
     .map(part => {
-      if (
-        /^https?:\/\//i.test(part) ||
-        /^\.[a-z0-9][a-z0-9_-]*$/i.test(part)
-      ) return part;
+      if (/^https?:\/\//i.test(part) ||
+          /^\.[a-z0-9][a-z0-9_-]*$/i.test(part)) return part;
 
-      return [...part]
-        .map(ch => SMALL[ch.toLowerCase()] || ch)
-        .join('');
-    })
-    .join('');
+      return [...part].map(ch => SMALL[ch.toLowerCase()] || ch).join('');
+    }).join('');
 }
 
 const box = s =>
   `╭━━〔 ${s} 〕━━╮\n${stylize('│ KAYSEUR MDX')}\n╰━━━━━━━━━━━━╯`;
 
 // ===============================
-// LES 100 COMMANDES
+// 100 COMMANDES
 // ===============================
 
 const COMMAND_GROUPS = {
@@ -68,30 +63,25 @@ const COMMAND_GROUPS = {
     'menu','help','ping','alive','botinfo','owner','runtime',
     'date','time','uptime','support','channel','prefix','about'
   ],
-
   'FUN & TEXTE': [
     'joke','quote','fact','meme','compliment','truth','dare',
     'ship','coin','roll','choose','8ball','reverse','upper','lower'
   ],
-
   'OUTILS': [
     'calc','translate','shortlink','qr','weather','define','wiki',
     'password','uuid','count','read','sticker','toimg','take',
     'emojimix','poll'
   ],
-
   'MÉDIAS': [
     'play','song','video','audio','lyrics','ytsearch',
     'tiktok','instagram','facebook','media'
   ],
-
   'GROUPE': [
     'tagall','hidetag','groupinfo','admins','members','linkgroup',
     'revoke','setname','setdesc','welcome','goodbye','antilink',
     'delete','promote','demote','kick','add','mute','unmute',
     'lock','unlock','everyone'
   ],
-
   'PROPRIÉTAIRE': [
     'broadcast','restart','shutdown','setprefix','setbotname',
     'block','unblock','listblocked','clear','stats','privacy',
@@ -105,12 +95,8 @@ const ALL_COMMANDS = Object.values(COMMAND_GROUPS).flat();
 
 console.log('Nombre de commandes :', ALL_COMMANDS.length);
 
-if (ALL_COMMANDS.length !== 100) {
-  console.error('ERREUR : le menu ne contient pas 100 commandes.');
-}
-
 // ===============================
-// VARIABLES GLOBALES
+// VARIABLES
 // ===============================
 
 const startedAt = Date.now();
@@ -135,7 +121,6 @@ function getSettings(id) {
       filters: {}
     });
   }
-
   return settings.get(id);
 }
 
@@ -149,7 +134,6 @@ function isGroup(jid = '') {
 
 function duration(ms) {
   const s = Math.floor(ms / 1000);
-
   return `${Math.floor(s / 86400)}j ${
     Math.floor(s % 86400 / 3600)
   }h ${Math.floor(s % 3600 / 60)}m ${s % 60}s`;
@@ -171,7 +155,6 @@ async function isAdmin(sock, group, sender) {
   try {
     const m = await sock.groupMetadata(group);
     const p = m.participants.find(x => x.id === sender);
-
     return !!p && ['admin', 'superadmin'].includes(p.admin);
   } catch {
     return false;
@@ -180,7 +163,6 @@ async function isAdmin(sock, group, sender) {
 
 async function isOwner(sender) {
   const n = jidNumber(sender);
-
   return (process.env.OWNER_NUMBERS || '')
     .split(',')
     .map(x => x.replace(/\D/g, ''))
@@ -223,11 +205,7 @@ ${OWNER} • KAYSEUR MDX`;
 }
 
 async function sendMenu(sock, jid, quoted) {
-  const imagePath = path.join(
-    __dirname,
-    'assets',
-    'kayseur-mdx-menu.png'
-  );
+  const imagePath = path.join(__dirname, 'assets', 'kayseur-mdx-menu.png');
 
   if (fs.existsSync(imagePath)) {
     await sock.sendMessage(
@@ -238,15 +216,10 @@ async function sendMenu(sock, jid, quoted) {
   }
 
   await sendText(sock, jid, menuText(), quoted);
-
-  await sendText(
-    sock,
-    jid,
+  await sendText(sock, jid,
     `╭━━〔 VOIR LA CHAÎNE 〕━━╮
 ${CHANNEL}
-╰━━━━━━━━━━━━━━━━━━━━╯`,
-    quoted
-  );
+╰━━━━━━━━━━━━━━━━━━━━╯`, quoted);
 }
 
 // ===============================
@@ -255,20 +228,19 @@ ${CHANNEL}
 
 async function directAudio(sock, jid, url, quoted) {
   if (!/^https:\/\//i.test(url)) {
-    return sendText(
-      sock,
-      jid,
-      'Utilise un lien HTTPS direct vers un fichier audio autorisé.',
-      quoted
-    );
+    return sendText(sock, jid, 'Utilise un lien HTTPS direct vers un fichier audio autorisé.', quoted);
   }
 
-  const u = new URL(url);
+  let u;
 
-  if (
-    ['localhost', '127.0.0.1'].includes(u.hostname) ||
-    u.hostname.endsWith('.local')
-  ) {
+  try {
+    u = new URL(url);
+  } catch {
+    return sendText(sock, jid, 'Lien invalide.', quoted);
+  }
+
+  if (['localhost','127.0.0.1'].includes(u.hostname) ||
+      u.hostname.endsWith('.local')) {
     return sendText(sock, jid, 'Lien non autorisé.', quoted);
   }
 
@@ -284,12 +256,7 @@ async function directAudio(sock, jid, url, quoted) {
     const type = (res.headers.get('content-type') || '').toLowerCase();
 
     if (!res.ok || !type.startsWith('audio/')) {
-      return sendText(
-        sock,
-        jid,
-        'Le lien doit pointer directement vers un fichier audio.',
-        quoted
-      );
+      return sendText(sock, jid, 'Le lien doit pointer directement vers un fichier audio.', quoted);
     }
 
     const len = Number(res.headers.get('content-length') || 0);
@@ -309,21 +276,15 @@ async function directAudio(sock, jid, url, quoted) {
       { audio: buf, mimetype: type, ptt: false },
       { quoted }
     );
-
-  } catch (e) {
-    await sendText(
-      sock,
-      jid,
-      'Impossible de récupérer ce fichier. Vérifie le lien.',
-      quoted
-    );
+  } catch {
+    await sendText(sock, jid, 'Impossible de récupérer ce fichier. Vérifie le lien.', quoted);
   } finally {
     clearTimeout(timer);
   }
 }
 
 // ===============================
-// GESTION DES COMMANDES
+// COMMANDES
 // ===============================
 
 async function handleCommand(sock, msg) {
@@ -349,9 +310,7 @@ async function handleCommand(sock, msg) {
   if (cfg.antispam && !fromMe) {
     const now = Date.now();
     const last = rate.get(sender) || 0;
-
     if (now - last < 1800) return;
-
     rate.set(sender, now);
   }
 
@@ -361,36 +320,26 @@ async function handleCommand(sock, msg) {
   );
 
   const matched = body.trim().match(
-    new RegExp(
-      '^' + escapedPrefix +
-      '([\\w8-]+)(?:\\s+([\\s\\S]*))?$',
-      'i'
-    )
+    new RegExp('^' + escapedPrefix + '([\\w8-]+)(?:\\s+([\\s\\S]*))?$', 'i')
   );
 
   if (!matched) {
-    if (
-      isGroup(jid) &&
-      cfg.antilink &&
-      /https?:\/\//i.test(body) &&
-      !(await isAdmin(sock, jid, sender))
-    ) {
+    if (isGroup(jid) && cfg.antilink &&
+        /https?:\/\//i.test(body) &&
+        !(await isAdmin(sock, jid, sender))) {
       await sock.sendMessage(jid, { delete: msg.key }).catch(() => {});
       await sendText(sock, jid, 'Lien supprimé : anti-lien activé.');
     }
 
     const key = body.toLowerCase().trim();
-
     if (cfg.filters[key]) {
       await sendText(sock, jid, cfg.filters[key], msg);
     }
-
     return;
   }
 
   const cmd = matched[1].toLowerCase();
   const rest = matched[2] || '';
-  const args = rest.trim().split(/\s+/).filter(Boolean);
 
   if (!ALL_COMMANDS.includes(cmd)) return;
 
@@ -411,29 +360,16 @@ async function handleCommand(sock, msg) {
   ];
 
   if (adminOnly.includes(cmd) && (!group || !admin)) {
-    return sendText(
-      sock,
-      jid,
-      'Commande réservée aux administrateurs du groupe.',
-      msg
-    );
+    return sendText(sock, jid, 'Commande réservée aux administrateurs du groupe.', msg);
   }
 
   if (ownerOnly.includes(cmd) && !owner) {
-    return sendText(
-      sock,
-      jid,
-      'Commande réservée au propriétaire du bot.',
-      msg
-    );
+    return sendText(sock, jid, 'Commande réservée au propriétaire du bot.', msg);
   }
 
   const context = msg.message?.extendedTextMessage?.contextInfo;
   const mentions = context?.mentionedJid || [];
-
-  const target =
-    mentions[0] ||
-    context?.participant;
+  const target = mentions[0] || context?.participant;
 
   const meta = group
     ? await sock.groupMetadata(jid).catch(() => null)
@@ -441,7 +377,6 @@ async function handleCommand(sock, msg) {
 
   try {
     switch (cmd) {
-
       case 'menu':
       case 'help':
         return sendMenu(sock, jid, msg);
@@ -452,7 +387,7 @@ async function handleCommand(sock, msg) {
       case 'alive':
         return sendText(sock, jid, `╭━━〔 ${BOT} 〕━━╮
 Statut : EN LIGNE
-Commandes : 100
+Commandes : ${ALL_COMMANDS.length}
 ╰━━━━━━━━━━━━╯`, msg);
 
       case 'botinfo':
@@ -461,7 +396,7 @@ Commandes : 100
 Version 1.0.0
 Créateur : ${OWNER}
 Préfixe : ${currentPrefix}
-Commandes : 100`, msg);
+Commandes : ${ALL_COMMANDS.length}`, msg);
 
       case 'owner':
       case 'support':
@@ -533,10 +468,7 @@ Ajoute OWNER_NUMBERS dans Render pour activer les commandes propriétaire.`, msg
 
       case '8ball':
         return sendText(sock, jid, [
-          'Oui.',
-          'Pas maintenant.',
-          'C’est possible.',
-          'Essaie encore plus tard.'
+          'Oui.','Pas maintenant.','C’est possible.','Essaie encore plus tard.'
         ][Math.floor(Math.random() * 4)], msg);
 
       case 'reverse':
@@ -548,16 +480,14 @@ Ajoute OWNER_NUMBERS dans Render pour activer les commandes propriétaire.`, msg
       case 'lower':
         return sendText(sock, jid, rest.toLocaleLowerCase('fr-FR'), msg);
 
-      case 'fancy':
-        return sendText(sock, jid, rest.split('').map(c => c === ' ' ? '　' : c).join(''), msg);
-
       case 'calc': {
         if (!/^[0-9+*/().% -]+$/.test(rest)) {
           return sendText(sock, jid, 'Expression non valide. Exemple : .calc 12*(5+2)', msg);
         }
-
         const result = Function('"use strict";return (' + rest + ')')();
-
+        if (!Number.isFinite(result)) {
+          return sendText(sock, jid, 'Résultat non valide.', msg);
+        }
         return sendText(sock, jid, `Résultat : ${result}`, msg);
       }
 
@@ -586,8 +516,7 @@ Ajoute OWNER_NUMBERS dans Render pour activer les commandes propriétaire.`, msg
         return sendText(sock, jid, crypto.randomUUID(), msg);
 
       case 'count':
-        return sendText(sock, jid, `Mots : ${rest.trim() ? rest.trim().split(/\s+/).length : 0}
-Caractères : ${rest.length}`, msg);
+        return sendText(sock, jid, `Mots : ${rest.trim() ? rest.trim().split(/\s+/).length : 0}\nCaractères : ${rest.length}`, msg);
 
       case 'read':
         return sendText(sock, jid, rest || 'Ajoute le texte après la commande.', msg);
@@ -677,10 +606,7 @@ Caractères : ${rest.length}`, msg);
 
       case 'delete': {
         const ctx = msg.message?.extendedTextMessage?.contextInfo;
-
-        if (!ctx?.stanzaId) {
-          return sendText(sock, jid, 'Réponds au message à supprimer.', msg);
-        }
+        if (!ctx?.stanzaId) return sendText(sock, jid, 'Réponds au message à supprimer.', msg);
 
         return sock.sendMessage(jid, {
           delete: {
@@ -695,30 +621,19 @@ Caractères : ${rest.length}`, msg);
       case 'promote':
       case 'demote':
       case 'kick': {
-        if (!target) {
-          return sendText(sock, jid, 'Mentionne un membre ou réponds à son message.', msg);
-        }
+        if (!target) return sendText(sock, jid, 'Mentionne un membre ou réponds à son message.', msg);
 
-        const action = cmd === 'promote'
-          ? 'promote'
-          : cmd === 'demote'
-            ? 'demote'
-            : 'remove';
+        const action = cmd === 'promote' ? 'promote'
+          : cmd === 'demote' ? 'demote' : 'remove';
 
         await sock.groupParticipantsUpdate(jid, [target], action);
-
         return sendText(sock, jid, 'Action effectuée.', msg);
       }
 
       case 'add': {
         const n = rest.replace(/\D/g, '');
-
-        if (n.length < 8) {
-          return sendText(sock, jid, 'Indique un numéro avec indicatif, sans +.', msg);
-        }
-
+        if (n.length < 8) return sendText(sock, jid, 'Indique un numéro avec indicatif, sans +.', msg);
         await sock.groupParticipantsUpdate(jid, [n + '@s.whatsapp.net'], 'add');
-
         return sendText(sock, jid, 'Demande d’ajout envoyée si les paramètres du groupe le permettent.', msg);
       }
 
@@ -744,12 +659,9 @@ Caractères : ${rest.length}`, msg);
       case 'hidetag': {
         const ps = meta.participants.map(p => p.id);
         const text = rest || 'Annonce du groupe';
-
         return sock.sendMessage(jid, {
-          text: stylize(
-            text + '\n' +
-            (cmd === 'hidetag' ? '' : ps.map(x => '@' + jidNumber(x)).join(' '))
-          ),
+          text: stylize(text + '\n' +
+            (cmd === 'hidetag' ? '' : ps.map(x => '@' + jidNumber(x)).join(' '))),
           mentions: ps
         });
       }
@@ -764,12 +676,8 @@ Caractères : ${rest.length}`, msg);
         return sendText(sock, jid, 'Arrêt manuel désactivé sur cette version hébergée.', msg);
 
       case 'setprefix':
-        if (!rest || rest.length > 3) {
-          return sendText(sock, jid, 'Exemple : .setprefix !', msg);
-        }
-
+        if (!rest || rest.length > 3) return sendText(sock, jid, 'Exemple : .setprefix !', msg);
         currentPrefix = rest;
-
         return sendText(sock, jid, `Nouveau préfixe : ${currentPrefix}`, msg);
 
       case 'setbotname':
@@ -778,18 +686,12 @@ Caractères : ${rest.length}`, msg);
       case 'block':
       case 'unblock': {
         if (!target) return sendText(sock, jid, 'Mentionne un utilisateur.', msg);
-
-        await sock.updateBlockStatus(
-          target,
-          cmd === 'block' ? 'block' : 'unblock'
-        );
-
+        await sock.updateBlockStatus(target, cmd === 'block' ? 'block' : 'unblock');
         return sendText(sock, jid, 'Statut de blocage mis à jour.', msg);
       }
 
       case 'listblocked': {
         const b = await sock.fetchBlocklist();
-
         return sendText(sock, jid, `Bloqués : ${b.length}\n${b.map(jidNumber).join(', ') || 'Aucun'}`, msg);
       }
 
@@ -797,9 +699,7 @@ Caractères : ${rest.length}`, msg);
         return sendText(sock, jid, 'Aucun cache temporaire à effacer.', msg);
 
       case 'stats':
-        return sendText(sock, jid, `Sessions actives : ${sessions.size}
-Commandes : ${ALL_COMMANDS.length}
-Uptime : ${duration(Date.now() - startedAt)}`, msg);
+        return sendText(sock, jid, `Sessions actives : ${sessions.size}\nCommandes : ${ALL_COMMANDS.length}\nUptime : ${duration(Date.now() - startedAt)}`, msg);
 
       case 'privacy':
         return sendText(sock, jid, 'Ne partage jamais ton code de pairing, ton PIN WhatsApp ou tes identifiants.', msg);
@@ -823,14 +723,8 @@ Uptime : ${duration(Date.now() - startedAt)}`, msg);
 
       case 'filter': {
         const parts = rest.split('|');
-
-        if (parts.length < 2) {
-          return sendText(sock, jid, 'Format : .filter mot-clé|réponse', msg);
-        }
-
-        cfg.filters[parts[0].trim().toLowerCase()] =
-          parts.slice(1).join('|').trim();
-
+        if (parts.length < 2) return sendText(sock, jid, 'Format : .filter mot-clé|réponse', msg);
+        cfg.filters[parts[0].trim().toLowerCase()] = parts.slice(1).join('|').trim();
         return sendText(sock, jid, 'Réponse automatique enregistrée pour cette session.', msg);
       }
 
@@ -843,28 +737,22 @@ Uptime : ${duration(Date.now() - startedAt)}`, msg);
 
       case 'rules':
         return sendText(sock, jid, 'Règles : respecte les membres, évite le spam, ne partage pas de liens dangereux et protège les comptes.', msg);
-    }
 
+      default:
+        return;
+    }
   } catch (err) {
     console.error('Command error:', cmd, err?.message);
-
-    return sendText(
-      sock,
-      jid,
-      'Une erreur est survenue. Vérifie les permissions du bot et réessaie.',
-      msg
-    );
+    return sendText(sock, jid, 'Une erreur est survenue. Vérifie les permissions du bot et réessaie.', msg);
   }
 }
 
 // ===============================
 // SESSION WHATSAPP
-// UNE SEULE FONCTION startSession
 // ===============================
 
 async function startSession(phone) {
   const dir = path.join(AUTH_ROOT, phone);
-
   fs.mkdirSync(dir, { recursive: true });
 
   const { state, saveCreds } = await useMultiFileAuthState(dir);
@@ -887,7 +775,6 @@ async function startSession(phone) {
   };
 
   sessions.set(phone, session);
-
   sock.ev.on('creds.update', saveCreds);
 
   let resolveReady;
@@ -900,30 +787,34 @@ async function startSession(phone) {
   });
 
   const readyTimer = setTimeout(() => {
-    if (!readyDone) {
-      readyDone = true;
-      rejectReady(new Error('Délai de connexion dépassé'));
-    }
-  }, 25000);
+    if (readyDone) return;
+    readyDone = true;
+    rejectReady(new Error('Délai de démarrage dépassé'));
+  }, 30000);
 
   sock.ev.on('connection.update', async update => {
     const { connection, lastDisconnect } = update;
-
     const current = sessions.get(phone);
 
     if (!current || current.sock !== sock) return;
 
-    if (connection === 'connecting' || connection === 'open') {
-      if (!readyDone) {
-        readyDone = true;
-        clearTimeout(readyTimer);
-        resolveReady(true);
-      }
+    // IMPORTANT : connecting signifie que le socket démarre.
+    // On attend également un petit délai dans la route avant le pairing.
+    if (connection === 'connecting' && !readyDone) {
+      readyDone = true;
+      clearTimeout(readyTimer);
+      resolveReady(true);
     }
 
     if (connection === 'open') {
       current.connected = true;
       current.pairing = false;
+
+      if (!readyDone) {
+        readyDone = true;
+        clearTimeout(readyTimer);
+        resolveReady(true);
+      }
 
       console.log('KAYSEUR MDX connecté :', phone);
     }
@@ -945,19 +836,14 @@ async function startSession(phone) {
         return;
       }
 
-      // Pendant une demande de pairing,
-      // ne pas créer une deuxième connexion.
-
       if (current.pairing) {
         sessions.delete(phone);
+        console.log('Connexion interrompue pendant le pairing :', phone);
         return;
       }
 
-      // Reconnexion automatique.
-
       setTimeout(async () => {
         const latest = sessions.get(phone);
-
         if (!latest || latest.sock !== sock) return;
 
         try {
@@ -985,18 +871,14 @@ async function startSession(phone) {
     for (const participant of update.participants || []) {
       if (update.action === 'add' && cfg.welcome) {
         await sock.sendMessage(update.id, {
-          text: stylize(
-            `Bienvenue @${jidNumber(participant)} dans le groupe !`
-          ),
+          text: stylize(`Bienvenue @${jidNumber(participant)} dans le groupe !`),
           mentions: [participant]
         });
       }
 
       if (update.action === 'remove' && cfg.goodbye) {
         await sock.sendMessage(update.id, {
-          text: stylize(
-            `@${jidNumber(participant)} a quitté le groupe. À bientôt !`
-          ),
+          text: stylize(`@${jidNumber(participant)} a quitté le groupe. À bientôt !`),
           mentions: [participant]
         });
       }
@@ -1028,7 +910,7 @@ app.get('/api/status', (req, res) => {
 });
 
 // ===============================
-// PAIRING CORRIGÉ
+// PAIRING
 // ===============================
 
 app.post('/api/pair', async (req, res) => {
@@ -1064,9 +946,7 @@ app.post('/api/pair', async (req, res) => {
 
     if (fs.existsSync(credsPath)) {
       try {
-        const creds = JSON.parse(
-          fs.readFileSync(credsPath, 'utf8')
-        );
+        const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
 
         if (creds.registered) {
           return res.status(409).json({
@@ -1078,8 +958,6 @@ app.post('/api/pair', async (req, res) => {
       }
     }
 
-    // Vérifier une session existante.
-
     const oldSession = sessions.get(phone);
 
     if (oldSession?.connected) {
@@ -1087,8 +965,6 @@ app.post('/api/pair', async (req, res) => {
         error: 'Ce numéro est déjà connecté.'
       });
     }
-
-    // Nettoyer une ancienne session non connectée.
 
     if (oldSession) {
       sessions.delete(phone);
@@ -1099,35 +975,41 @@ app.post('/api/pair', async (req, res) => {
         console.log('Nettoyage ancienne session :', err.message);
       }
 
-      await wait(500);
+      await wait(1000);
     }
 
-    // Créer UNE seule nouvelle session.
-
+    // Créer une nouvelle session.
     sock = await startSession(phone);
 
-    const session = sessions.get(phone);
+    let session = sessions.get(phone);
 
     if (!session || session.sock !== sock) {
       throw new Error('Session introuvable');
     }
 
-    // Attendre que la connexion démarre.
-
+    // Attendre le démarrage du socket.
     await session.ready;
-    await wait(1500);
 
-    const current = sessions.get(phone);
+    // Laisser le temps à Baileys de stabiliser la connexion.
+    await wait(3000);
 
-    if (!current || current.sock !== sock) {
+    session = sessions.get(phone);
+
+    if (!session || session.sock !== sock) {
       throw new Error('La session a changé');
     }
 
-    // Générer le code.
+    if (session.connected) {
+      return res.status(409).json({
+        error: 'Ce numéro est déjà connecté.'
+      });
+    }
 
+    // Demander le code une seule fois.
     const code = await sock.requestPairingCode(phone);
 
-    current.pairing = false;
+    // Ne pas détruire la session après la génération.
+    session.pairing = false;
 
     pairingTimes.set(phone, Date.now());
 
